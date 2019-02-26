@@ -1,0 +1,100 @@
+# -------------------------------------------------------------------------- #
+#
+# Copyright (C) 1991-2010 Altera Corporation
+# Your use of Altera Corporation's design tools, logic functions 
+# and other software and tools, and its AMPP partner logic 
+# functions, and any output files from any of the foregoing 
+# (including device programming or simulation files), and any 
+# associated documentation or information are expressly subject 
+# to the terms and conditions of the Altera Program License 
+# Subscription Agreement, Altera MegaCore Function License 
+# Agreement, or other applicable license agreement, including, 
+# without limitation, that your use is for the sole purpose of 
+# programming logic devices manufactured by Altera and sold by 
+# Altera or its authorized distributors.  Please refer to the 
+# applicable agreement for further details.
+#
+# -------------------------------------------------------------------------- #
+#
+# Quartus II
+# Version 9.1 Build 350 03/24/2010 Service Pack 2 SJ Web Edition
+# Date created = 19:29:39  December 14, 2016
+#
+# -------------------------------------------------------------------------- #
+#
+# Notes:
+#
+# 1) The default values for assignments are stored in the file:
+#		LCD_Tetris_assignment_defaults.qdf
+#    If this file doesn't exist, see file:
+#		assignment_defaults.qdf
+#
+# 2) Altera recommends that you do not modify this file. This
+#    file is updated automatically by the Quartus II software
+#    and any changes you make may be lost or overwritten.
+#
+# -------------------------------------------------------------------------- #
+
+
+set_global_assignment -name FAMILY "Cyclone III"
+set_global_assignment -name DEVICE EP3C16Q240C8
+set_global_assignment -name TOP_LEVEL_ENTITY LCD_Tetris
+set_global_assignment -name ORIGINAL_QUARTUS_VERSION "9.1 SP2"
+set_global_assignment -name PROJECT_CREATION_TIME_DATE "19:29:39  DECEMBER 14, 2016"
+set_global_assignment -name LAST_QUARTUS_VERSION "9.1 SP2"
+set_global_assignment -name USE_GENERATED_PHYSICAL_CONSTRAINTS OFF -section_id eda_blast_fpga
+set_global_assignment -name VHDL_FILE LCD_Tetris.vhd
+set_global_assignment -name MIN_CORE_JUNCTION_TEMP 0
+set_global_assignment -name MAX_CORE_JUNCTION_TEMP 85
+set_global_assignment -name NOMINAL_CORE_SUPPLY_VOLTAGE 1.2V
+set_global_assignment -name PARTITION_NETLIST_TYPE SOURCE -section_id Top
+set_global_assignment -name PARTITION_COLOR 16764057 -section_id Top
+set_global_assignment -name LL_ROOT_REGION ON -section_id "Root Region"
+set_global_assignment -name LL_MEMBER_STATE LOCKED -section_id "Root Region"
+set_global_assignment -name STRATIX_DEVICE_IO_STANDARD "2.5 V"
+set_location_assignment PIN_149 -to CK
+set_location_assignment PIN_100 -to DB[7]
+set_location_assignment PIN_98 -to DB[6]
+set_location_assignment PIN_94 -to DB[5]
+set_location_assignment PIN_88 -to DB[4]
+set_location_assignment PIN_86 -to DB[3]
+set_location_assignment PIN_84 -to DB[2]
+set_location_assignment PIN_82 -to DB[1]
+set_location_assignment PIN_80 -to DB[0]
+set_location_assignment PIN_76 -to E
+set_location_assignment PIN_70 -to RS
+set_location_assignment PIN_72 -to RW
+set_global_assignment -name MISC_FILE "C:/Users/ZeProgrammer/Desktop/LCM俄羅斯方塊/文字型LCD FPGA 遊戲機/LCD_Tetris.dpf"
+set_location_assignment PIN_112 -to reset
+set_global_assignment -name VHDL_FILE BZ.vhd
+set_location_assignment PIN_102 -to BZ_OUT
+set_location_assignment PIN_106 -to L_B
+set_location_assignment PIN_108 -to R_B
+set_global_assignment -name MISC_FILE "H:/個人/小專題/LCM俄羅斯方塊/文字型LCD FPGA 遊戲機/LCD_Tetris.dpf"
+set_global_assignment -name MISC_FILE "C:/Users/Administrator/Google 雲端硬碟/LCM俄羅斯方塊/文字型LCD FPGA 遊戲機/LCD_Tetris.dpf"
+set_location_assignment PIN_107 -to DEBUG_1[7]
+set_location_assignment PIN_109 -to DEBUG_1[6]
+set_location_assignment PIN_111 -to DEBUG_1[5]
+set_location_assignment PIN_113 -to DEBUG_1[4]
+set_location_assignment PIN_117 -to DEBUG_1[3]
+set_location_assignment PIN_119 -to DEBUG_1[2]
+set_location_assignment PIN_126 -to DEBUG_1[1]
+set_location_assignment PIN_128 -to DEBUG_1[0]
+set_global_assignment -name MISC_FILE "D:/桌面/文字型LCD FPGA 遊戲機/LCD_Tetris.dpf"
+set_global_assignment -name MISC_FILE "D:/桌面/文字型LCD FPGA 遊戲機 畫圖法/LCD_Tetris.dpf"
+set_location_assignment PIN_110 -to T_B
+set_location_assignment PIN_83 -to DEBUG_1[15]
+set_location_assignment PIN_85 -to DEBUG_1[14]
+set_location_assignment PIN_87 -to DEBUG_1[13]
+set_location_assignment PIN_93 -to DEBUG_1[12]
+set_location_assignment PIN_95 -to DEBUG_1[11]
+set_location_assignment PIN_99 -to DEBUG_1[10]
+set_location_assignment PIN_101 -to DEBUG_1[9]
+set_location_assignment PIN_103 -to DEBUG_1[8]
+set_global_assignment -name MISC_FILE "C:/Users/ZeProgrammer/Desktop/文字型LCD FPGA 遊戲機 畫圖法/LCD_Tetris.dpf"
+set_global_assignment -name TIMEQUEST_MULTICORNER_ANALYSIS ON
+set_global_assignment -name TIMEQUEST_DO_CCPP_REMOVAL ON
+set_global_assignment -name USE_CONFIGURATION_DEVICE ON
+set_global_assignment -name CYCLONEIII_CONFIGURATION_DEVICE EPCS4
+set_global_assignment -name FORCE_CONFIGURATION_VCCIO ON
+set_instance_assignment -name PARTITION_HIERARCHY root_partition -to | -section_id Top

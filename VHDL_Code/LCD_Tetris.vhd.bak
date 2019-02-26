@@ -1,0 +1,440 @@
+library IEEE;
+use IEEE.std_logic_1164.all;
+use IEEE.std_logic_unsigned.all;
+use IEEE.std_logic_arith.all;
+use ieee.numeric_std.all;
+-------------------------------------------------
+entity LCD_Tetris  is
+	port(	
+			CK,reset:in std_logic;									--輸入時脈
+			R_B,L_B,T_B:in std_logic;
+			RS,RW,E,BZ_OUT:buffer std_logic;						--LCM 控制線	蜂鳴器控制線
+			DB,DEBUG:buffer std_logic_vector(7 downto 0);
+			DEBUG_1:buffer std_logic_vector(15 downto 0)
+			);
+end LCD_Tetris;			
+-------------------------------------------------
+architecture A of LCD_Tetris is
+component LCM_PIC is
+   port(    														
+        CK,CK_10K:in std_logic; 									--輸入時脈
+		RS,RW,E:buffer std_logic;
+		DB,DEBUG:buffer std_logic_vector(7 downto 0);
+		SEGRAM:in std_logic_vector(0 to 319);
+		LCM_WORD_IN_1, LCM_WORD_IN_2, LCM_WORD_IN_3 ,LCM_WORD_IN_4 ,LCM_WORD_IN_5 ,LCM_WORD_IN_6 ,
+	    LCM_WORD_IN_7, LCM_WORD_IN_8, LCM_WORD_IN_9 ,LCM_WORD_IN_10,LCM_WORD_IN_11,LCM_WORD_IN_12,
+	    LCM_WORD_IN_13,LCM_WORD_IN_14,LCM_WORD_IN_15,LCM_WORD_IN_16,LCM_WORD_IN_17,LCM_WORD_IN_18,
+	    LCM_WORD_IN_19,LCM_WORD_IN_20,LCM_WORD_IN_21,LCM_WORD_IN_22,LCM_WORD_IN_23,LCM_WORD_IN_24
+	    :std_logic_vector(7 downto 0)
+       );
+end component LCM_PIC;
+
+component BZ is	
+   port(  
+		CK,RESET:in std_logic;
+		BZ_OUT:buffer std_logic
+		);
+end component BZ;
+-------------------------------------------------
+signal CK_10K,CK_1K,CK2:std_logic;
+signal CK_DELAY,CK_2_DELAY,DELAY,DELAY_1,DELAY_2,DELAY_3,CK_1K_DELAY:integer range 0 to 50000;
+
+type RAM_PIC is array(0 to 27) of std_logic_vector(0 to 15);
+constant PIC:RAM_PIC:=( -- T       O       L       J       S        I      Z
+						X"4E00",X"CC00",X"4460",X"44C0",X"6C00",X"4444",X"C600",
+						X"4640",X"CC00",X"0E80",X"8E00",X"4620",X"0F00",X"2640",
+						X"0E40",X"CC00",X"C440",X"6440",X"06C0",X"4444",X"0C60",
+						X"4C40",X"CC00",X"2E00",X"0E20",X"8C40",X"00F0",X"4C80"
+						);
+type RAM_PIC_GAM is array(0 to 3) of std_logic_vector(0 to 3);
+signal PIC_GAM,PIC_GAM_befor:RAM_PIC_GAM;
+
+------------------------------------------------
+signal SEGRAM:std_logic_vector(0 to 319);						--LCD顯示螢幕記憶體
+type RAM_2 is array(0 to 15)of std_logic_vector(0 to 13);
+signal Tetris_RAM,BACK_GROUND,Tetris_DRAW:RAM_2;				--14*16
+
+type RAM_3 is array(0 to 15)of std_logic_vector(0 to 5);
+signal NEXT_RAM:RAM_3;
+
+signal LCM_WORD_IN_1, LCM_WORD_IN_2, LCM_WORD_IN_3 ,LCM_WORD_IN_4 ,LCM_WORD_IN_5 ,LCM_WORD_IN_6 ,
+	   LCM_WORD_IN_7, LCM_WORD_IN_8, LCM_WORD_IN_9 ,LCM_WORD_IN_10,LCM_WORD_IN_11,LCM_WORD_IN_12,
+	   LCM_WORD_IN_13,LCM_WORD_IN_14,LCM_WORD_IN_15,LCM_WORD_IN_16,LCM_WORD_IN_17,LCM_WORD_IN_18,
+	   LCM_WORD_IN_19,LCM_WORD_IN_20,LCM_WORD_IN_21,LCM_WORD_IN_22,LCM_WORD_IN_23,LCM_WORD_IN_24
+	   :std_logic_vector(7 downto 0);
+
+signal BUT_DELAY:integer range 0 to 24999;
+signal R_B_M,L_B_M,T_B_M:std_logic;							--除頻後的按鈕
+
+signal Tetris:integer range 0 to 8;							--主程式case
+signal PIC_MAKE:integer range 0 to 8;						--畫出方塊副程式 
+signal PIC_I:integer range 0 to 13;
+signal SEC_DELAY:integer range 0 to 50000000;				--下降延遲時間
+
+signal DOWN:integer range 0 to 14;							--下降位址變數
+signal RLM:integer range 0 to 14;							--左移位址變數
+signal TURN:integer range 0 to 3;							--旋轉方塊變數
+signal BLK,BLK_MAKE,BLK_NEXT:integer range 0 to 6;							--所選的方塊
+signal L_B_S,R_B_S,T_B_S:std_logic;							--butten case
+signal CHECK:integer range 0 to 2; 
+signal DRAW_DELAY:integer range 0 to 1000;
+signal D_L_R:integer range 0 to 4;							--方向位元 1:下降 2:左移 3:右移 4:旋轉
+signal CLR,CLR_R:integer range 1 to 14;							--消行
+
+signal LEVEL:integer range 0 to 5;							--關卡等級
+signal SCORE :integer range 0 to 999;
+
+signal GAME_OVER:integer range 0 to 1;
+signal LOCK_CK,BLK_LOCK_MAKE:std_logic;
+-------------------------------------------------
+begin
+process(CK)
+begin
+------------------------------------
+	
+	PIC_GAM(0) <= PIC(TURN * 7 + BLK)( 0 to 3);
+	PIC_GAM(1) <= PIC(TURN * 7 + BLK)( 4 to 7);
+	PIC_GAM(2) <= PIC(TURN * 7 + BLK)( 8 to 11);
+	PIC_GAM(3) <= PIC(TURN * 7 + BLK)(12 to 15);
+	
+	PIC_GAM_befor(0) <= PIC((TURN - 1) * 7 + BLK)( 0 to 3);
+	PIC_GAM_befor(1) <= PIC((TURN - 1) * 7 + BLK)( 4 to 7);
+	PIC_GAM_befor(2) <= PIC((TURN - 1) * 7 + BLK)( 8 to 11);
+	PIC_GAM_befor(3) <= PIC((TURN - 1) * 7 + BLK)(12 to 15);
+	
+------------------------------------
+
+--==================================		--亂數模組
+	LOCK_CK <= not LOCK_CK;
+--==================================
+	
+	if rising_edge(CK) then
+		if LOCK_CK = '1' then
+			if BLK_MAKE = 6 then
+				BLK_MAKE <= 0;
+			else
+				BLK_MAKE <= BLK_MAKE + 1;
+			end if;
+		end if;
+		if BUT_DELAY = 24999 then
+			T_B_M <= T_B;
+			R_B_M <= R_B;
+			L_B_M <= L_B;
+			BUT_DELAY <= 0;
+		else
+			BUT_DELAY <= BUT_DELAY + 1;
+		end if;
+			
+		if CK_DELAY = 2500 then								--CK_1K 除頻
+			CK_10K<=not CK_10K; CK_DELAY<=0; 
+		else
+			CK_DELAY<=CK_DELAY+1;
+		end if;	
+	
+	end if;
+	
+	if rising_edge(CK_10K) then	
+		if reset = '0' then		--遊戲重置
+			LCM_WORD_IN_1 <= X"20"; LCM_WORD_IN_2 <= X"20"; LCM_WORD_IN_3 <= X"20"; LCM_WORD_IN_4 <= X"20"; LCM_WORD_IN_5 <= X"20";
+			LCM_WORD_IN_6 <= X"20"; LCM_WORD_IN_7 <= X"20"; LCM_WORD_IN_8 <= X"20"; LCM_WORD_IN_9 <= X"20"; LCM_WORD_IN_10 <= X"20";
+			LCM_WORD_IN_11 <= X"20"; LCM_WORD_IN_12 <= X"20"; LCM_WORD_IN_13 <= X"20"; LCM_WORD_IN_14 <= X"20"; LCM_WORD_IN_15 <= X"20";
+			LCM_WORD_IN_16 <= X"20"; LCM_WORD_IN_17 <= X"20"; LCM_WORD_IN_18 <= X"20"; LCM_WORD_IN_19 <= X"20"; LCM_WORD_IN_20 <= X"20"; 
+			LCM_WORD_IN_21 <= X"20"; LCM_WORD_IN_22 <= X"20"; LCM_WORD_IN_23 <= X"20"; LCM_WORD_IN_24 <= X"20"; 
+			Tetris <= 0; PIC_MAKE <= 0; PIC_I <= 0; SEC_DELAY <= 0; DOWN <= 0; RLM <= 0; TURN <= 0; CHECK <= 0;
+			DRAW_DELAY <= 0;  D_L_R <= 0; CLR <= 1; CLR_R <= 1; LEVEL <= 0; SCORE <= 0; GAME_OVER <= 0;
+
+		else
+			if BLK_LOCK_MAKE = '1' then							--亂數模組
+				BLK_LOCK_MAKE <= '0';
+				BLK <= BLK_NEXT; BLK_NEXT <= BLK_MAKE;
+			end if;
+			
+			NEXT_RAM(0) <= "111111"; NEXT_RAM(15) <= "111111";	--右邊外框
+			FOR N_R IN 1 TO 14 LOOP
+				NEXT_RAM(N_R)(0) <= '0';
+				NEXT_RAM(N_R)(5) <= '1';
+			END LOOP;
+			
+			NEXT_RAM(2)(1 to 4) <= PIC(BLK_NEXT)(0 to 3);		--將隨機產生的下一個方塊傳入預告位置
+			NEXT_RAM(3)(1 to 4) <= PIC(BLK_NEXT)(4 to 7);
+			NEXT_RAM(4)(1 to 4) <= PIC(BLK_NEXT)(8 to 11);
+			NEXT_RAM(5)(1 to 4) <= PIC(BLK_NEXT)(12 to 15);
+			
+			if GAME_OVER = 0 then
+				LCM_WORD_IN_1 <=X"20";LCM_WORD_IN_2 <=X"20";LCM_WORD_IN_3 <=X"4C";LCM_WORD_IN_4 <=X"65";
+				LCM_WORD_IN_5 <=X"76";LCM_WORD_IN_6 <=X"65";LCM_WORD_IN_7 <=X"6C";LCM_WORD_IN_8 <=X"3A";
+				LCM_WORD_IN_9 <=X"20";LCM_WORD_IN_10 <= CONV_STD_LOGIC_VECTOR(LEVEL,8) + x"30";--  Level
+				LCM_WORD_IN_11<=X"20";LCM_WORD_IN_12<=X"20"; 
+				LCM_WORD_IN_13<=X"20";LCM_WORD_IN_14<=X"20";LCM_WORD_IN_15<=X"53";LCM_WORD_IN_16<=X"63";
+				LCM_WORD_IN_17<=X"6F";LCM_WORD_IN_18<=X"72";LCM_WORD_IN_19<=X"65";LCM_WORD_IN_20<=X"3A";
+				LCM_WORD_IN_21<= CONV_STD_LOGIC_VECTOR(SCORE/100,8) + x"30";
+				LCM_WORD_IN_22<= CONV_STD_LOGIC_VECTOR((SCORE MOD 100)/10,8) + x"30";
+				LCM_WORD_IN_23<= CONV_STD_LOGIC_VECTOR(SCORE MOD 10,8) + x"30";--  Score
+				LCM_WORD_IN_24<=X"20"; 
+			else
+				PIC_MAKE <= 7;
+				LCM_WORD_IN_1 <=X"20";LCM_WORD_IN_2 <=X"20";LCM_WORD_IN_3 <=X"20";LCM_WORD_IN_4 <=X"20";
+				LCM_WORD_IN_5 <=X"47";LCM_WORD_IN_6 <=X"41";LCM_WORD_IN_7 <=X"4D";LCM_WORD_IN_8 <=X"45";
+				LCM_WORD_IN_9 <=X"20";LCM_WORD_IN_10<=X"20"; LCM_WORD_IN_11<=X"20";LCM_WORD_IN_12<=X"20"; --  GAME
+				
+				LCM_WORD_IN_13<=X"20";LCM_WORD_IN_14<=X"20";LCM_WORD_IN_15<=X"20";LCM_WORD_IN_16<=X"20";
+				LCM_WORD_IN_17<=X"4F";LCM_WORD_IN_18<=X"56";LCM_WORD_IN_19<=X"45";LCM_WORD_IN_20<=X"52";
+				LCM_WORD_IN_21<=X"20"; LCM_WORD_IN_22<=X"20"; LCM_WORD_IN_23<=X"20"; LCM_WORD_IN_24<=X"20"; --  OVER
+				
+			end if;
+			case PIC_MAKE is 
+				when 0=>
+						case Tetris is
+							when 0=>
+									Tetris <= 1;
+									RLM <= 6; 								--X
+									DOWN <= 1;								--Y
+									BLK <= 2;
+									DEBUG_1 <=not "0000000000000000";
+									LEVEL <= 1;
+									
+									BACK_GROUND(0) <= "11111111111111"; BACK_GROUND(1) <= "10000000000011"; BACK_GROUND(2) <= "10000000000011"; BACK_GROUND(3) <= "10000000000011";
+									BACK_GROUND(4) <= "10000000000011"; BACK_GROUND(5) <= "10000000000011"; BACK_GROUND(6) <= "10000000000011"; BACK_GROUND(7) <= "10000000000011";
+									BACK_GROUND(8) <= "10000000000011"; BACK_GROUND(9) <= "10000000000011"; BACK_GROUND(10) <= "10000000000011"; BACK_GROUND(11) <= "10000000000011";
+									BACK_GROUND(12) <= "10000000000011"; BACK_GROUND(13) <= "10000000000011"; BACK_GROUND(14) <= "10000000000011"; BACK_GROUND(15) <= "11111111111111";
+									
+									NEXT_RAM(0) <= "000000"; NEXT_RAM(1) <= "000000"; NEXT_RAM(2) <= "000000"; NEXT_RAM(3) <= "000000";
+									NEXT_RAM(4) <= "000000"; NEXT_RAM(5) <= "000000"; NEXT_RAM(6) <= "000000"; NEXT_RAM(7) <= "000000";
+									NEXT_RAM(8) <= "000000"; NEXT_RAM(9) <= "000000"; NEXT_RAM(10) <= "000000"; NEXT_RAM(11) <= "000000";
+									NEXT_RAM(12) <= "000000"; NEXT_RAM(13) <= "000000"; NEXT_RAM(14) <= "000000"; NEXT_RAM(15) <= "000000";
+							when 1=>
+									FOR DRAW IN 0 TO 15 LOOP
+										Tetris_RAM(DRAW) <= BACK_GROUND(DRAW);		--將背景寫至顯示畫面
+									END LOOP;
+									Tetris <= 2;
+							when 2=>
+									Tetris <= 3; 
+									FOR DRAW IN 0 TO 15 LOOP						--將暫時的畫面和背景重合並顯示出來
+										Tetris_RAM(DRAW) <= (Tetris_DRAW(DRAW) OR BACK_GROUND(DRAW));
+										Tetris_DRAW(DRAW) <= "00000000000000";		--將暫時的畫面清除
+									END LOOP;
+							when 3=>
+									CHECK <= 0; --碰撞檢查位元歸零
+									
+									if SEC_DELAY = ( 6000/(1 + ((LEVEL*4)/10)) ) then 	--下降延遲時間
+										SEC_DELAY <= 0;
+										PIC_MAKE <= 1;					--跳至畫出方塊副程式 	
+										D_L_R <= 1;						--方向位元 1:向下
+										DOWN <= DOWN + 1;				--下降一格
+									else
+										SEC_DELAY <= SEC_DELAY + 1;
+										
+										case L_B_S is
+											when '0' =>
+														if L_B_M = '0' then
+															L_B_S <= '1';
+															PIC_MAKE <= 1;				--跳至畫出方塊副程式
+															D_L_R <= 2;					--方向位元 2:向左 
+															RLM <= RLM - 1;
+														end if;
+											when '1' =>
+														if L_B_M = '1' then
+															L_B_S <= '0';
+														end if;
+										end case;		--case L_B_S
+										
+										case R_B_S is
+											when '0' =>
+														if R_B_M = '0' then
+															R_B_S <= '1';
+															PIC_MAKE <= 1;				--跳至畫出方塊副程式
+															D_L_R <= 3;					--方向位元 3:向右
+															RLM <= RLM + 1;
+														end if;
+											when '1' =>
+														if R_B_M = '1' then
+															R_B_S <= '0';
+														end if;
+										end case;		--R_B_S
+									end if;
+												
+									case T_B_S is
+										when '0' =>
+													if T_B_M = '0' then
+														T_B_S <= '1';
+														PIC_MAKE <= 1;					--跳至畫出方塊副程式
+														D_L_R <= 4;						--方向位元 4:旋轉
+														TURN <= TURN + 1;
+													end if;
+										when '1' =>
+													if T_B_M = '1' then
+														T_B_S <= '0';
+													end if;
+									end case;		--case T_B_S
+
+							when others => null;
+						end case;		--case Tetris
+				when 1=>	--判斷有無碰撞
+						PIC_MAKE <= 2;
+						FOR D_CHECK IN 0 TO 3 LOOP
+							FOR D_CHECK_J IN 0 TO 3 LOOP
+								if (PIC_GAM(D_CHECK)(D_CHECK_J) and BACK_GROUND(DOWN + D_CHECK)(RLM + D_CHECK_J)) = '1' then
+									CHECK <= 1;								--碰撞檢查位元 0:無碰撞 1:有碰撞
+	--								DEBUG_1(3 downto 0) <= not ("1001");
+								end if;
+							END LOOP;
+						END LOOP;
+
+				when 2=>	--將方塊畫至對應位置
+						PIC_MAKE <= 0;
+						Tetris <= 1;
+						
+						if CHECK = 1 then
+							D_L_R <= 0;		--方向位元歸零
+							case D_L_R is
+								when 1=>
+										FOR D_DRAW IN 0 TO 3 LOOP   --如果有碰撞就拉回上一位址並寫入背景
+											BACK_GROUND(DOWN - 1 + D_DRAW)(RLM to RLM + 3) <= PIC_GAM(D_DRAW) or BACK_GROUND(DOWN - 1 + D_DRAW)(RLM to RLM + 3);
+											--DOWN <= 0; RLM <= 6;
+											--BLK <= BLK + 1;
+											PIC_MAKE <= 3;
+											TURN <= 0;
+										END LOOP;
+								when 2=>
+										FOR L_DRAW IN 0 TO 3 LOOP   --如果有碰撞就拉回上一位址 
+											Tetris_DRAW(DOWN + L_DRAW)((RLM + 1) to (RLM + 1 + 3)) <= PIC_GAM(L_DRAW);
+											RLM <= RLM + 1;
+										END LOOP;
+								when 3=>
+										FOR R_DRAW IN 0 TO 3 LOOP   --如果有碰撞就拉回上一位址 
+											Tetris_DRAW(DOWN + R_DRAW)((RLM - 1) to (RLM - 1 + 3)) <= PIC_GAM(R_DRAW);
+											RLM <= RLM - 1;
+										END LOOP;
+								when 4=>
+										FOR T_DRAW IN 0 TO 3 LOOP   --如果有碰撞就拉回上一位址 
+											Tetris_DRAW(DOWN + T_DRAW)(RLM to RLM + 3) <= PIC_GAM_befor(T_DRAW) ;
+											TURN <= TURN - 1;
+										END LOOP;
+										
+								when others=>D_L_R <= 0;
+							end case;
+						else
+							
+							FOR D_SEE IN 0 TO 3 LOOP	--沒有碰撞,暫時將4*4的資料顯示在顯示畫面上
+								Tetris_DRAW(DOWN + D_SEE)(RLM to RLM + 3) <= PIC_GAM(D_SEE) ;
+							END LOOP;
+						end if;
+
+				when 3=>
+						if CLR = 1 then					--檢查有無疊滿任何一列
+							CLR <= 14;
+							PIC_MAKE <= 6;
+						else
+							if BACK_GROUND(CLR) = "11111111111111" then	
+								PIC_MAKE <= 4;			--跳至 4 消除並且調整頁面
+								CLR_R <= CLR;
+							else
+								CLR <= CLR - 1;
+							end if;
+						end if;
+				when 4=>
+						if CLR_R = 1 then
+							PIC_MAKE <= 5;
+							CLR_R <= 14;
+							BACK_GROUND(1) <= "10000000000011";
+						else
+							CLR_R <= CLR_R - 1;
+							BACK_GROUND(CLR_R) <= BACK_GROUND(CLR_R - 1);
+						end if;
+				when 5=>
+						if SCORE >= 400 then			--分數大於等於400
+							LEVEL <= 5;					--關卡5
+						elsif SCORE < 100 then			--分數小於 100
+							LEVEL <= 1;
+						elsif SCORE < 200 then			--分數小於 200
+							LEVEL <= 2;
+						elsif SCORE < 300 then			--分數小於 300
+							LEVEL <= 3;
+						elsif SCORE < 400 then			--分數小於 400
+							LEVEL <= 4;
+						end if;
+						SCORE <= SCORE + 20;
+						
+						PIC_MAKE <= 0;
+						Tetris <= 1;
+				when 6=>
+
+						FOR TOP IN 1 TO 10 LOOP
+							if BACK_GROUND(1)(TOP) = '1' then	--判斷到頂
+								GAME_OVER <= 1;
+								PIC_MAKE <= 7;
+							else
+								PIC_MAKE <= 0;
+								Tetris <= 1;
+								DOWN <= 1; RLM <= 6; 
+								BLK_LOCK_MAKE <= '1';
+							end if;
+						END LOOP;
+				when 7=>			--GAME OVER 背景清除,畫面寫入
+						BACK_GROUND(0) <= "00000000000000"; BACK_GROUND(1) <= "00000000000000"; BACK_GROUND(2) <= "00000000000000"; BACK_GROUND(3) <= "00000000000000";
+						BACK_GROUND(4) <= "00000000000000"; BACK_GROUND(5) <= "00000000000000"; BACK_GROUND(6) <= "00000000000000"; BACK_GROUND(7) <= "00000000000000";
+						BACK_GROUND(8) <= "00000000000000"; BACK_GROUND(9) <= "00000000000000"; BACK_GROUND(10) <= "00000000000000"; BACK_GROUND(11) <= "00000000000000";
+						BACK_GROUND(12) <= "00000000000000"; BACK_GROUND(13) <= "00000000000000"; BACK_GROUND(14) <= "00000000000000"; BACK_GROUND(15) <= "00000000000000";
+						
+						Tetris_RAM(0) <= "11111111111111";	NEXT_RAM(0) <= "111111"; Tetris_RAM(1) <= "10000000000000";	NEXT_RAM(1) <= "000001";
+						Tetris_RAM(2) <= "10110000000001";	NEXT_RAM(2) <= "000001"; Tetris_RAM(3) <= "10101000000010";	NEXT_RAM(3) <= "000001";
+						Tetris_RAM(4) <= "10110000000100";	NEXT_RAM(4) <= "000001"; Tetris_RAM(5) <= "10101000001111";	NEXT_RAM(5) <= "110001";
+						Tetris_RAM(6) <= "10110000010100";	NEXT_RAM(6) <= "000001"; Tetris_RAM(7) <= "10000000100100";	NEXT_RAM(7) <= "000001";
+						Tetris_RAM(8) <= "10000000000110";	NEXT_RAM(8) <= "001001"; Tetris_RAM(9) <= "10101000000111";	NEXT_RAM(9) <= "001001";
+						Tetris_RAM(10) <= "10101000000010";	NEXT_RAM(10) <= "101001"; Tetris_RAM(11) <= "10010000000010";	NEXT_RAM(11) <= "011001";
+						Tetris_RAM(12) <= "10010000000010";	NEXT_RAM(12) <= "001001"; Tetris_RAM(13) <= "10010000000000";	NEXT_RAM(13) <= "000001";
+						Tetris_RAM(14) <= "10000000000000";	NEXT_RAM(14) <= "000001"; Tetris_RAM(15) <= "11111111111111";	NEXT_RAM(15) <= "111111";
+
+				when others=>null;
+			end case;
+	end if; --reset
+end if;--CK_10K
+
+end process;
+--
+--							-------------- 
+--							|       |    |
+--							|	    | 畫 |
+--							| 畫面1 | 面 |
+--							|		|  2 |
+--							|	    |    |
+--							-------------- 
+--					           			 
+
+		SEG_CHANGE_J:For J in 0 to 15 Generate					--畫面1轉換
+			SEG_CHANGE_T:For T in 0 to 13 Generate
+				SEGRAM(((T * 16) + J)) <= Tetris_RAM(J)(T);
+			end Generate SEG_CHANGE_T;										
+		end Generate SEG_CHANGE_J;
+		
+		SEG_CHANGE_K:For K in 0 to 15 Generate					--畫面1轉換
+			SEG_CHANGE_Z:For Z in 0 to 5 Generate
+				SEGRAM(224+((Z * 16) + K)) <= NEXT_RAM(K)(Z);
+			end Generate SEG_CHANGE_Z;		
+		end Generate SEG_CHANGE_K;
+	
+	u0:LCM_PIC
+	port map(      
+			CK => CK,			
+			CK_10K => CK_10K,	
+			RS => RS,			
+			RW => RW,			
+			E => E,				
+			DB => DB,
+			DEBUG => DEBUG,
+			SEGRAM => SEGRAM,
+			LCM_WORD_IN_1 =>LCM_WORD_IN_1, LCM_WORD_IN_2 =>LCM_WORD_IN_2, LCM_WORD_IN_3 =>LCM_WORD_IN_3, LCM_WORD_IN_4 =>LCM_WORD_IN_4,
+			LCM_WORD_IN_5 =>LCM_WORD_IN_5, LCM_WORD_IN_6 =>LCM_WORD_IN_6, LCM_WORD_IN_7 =>LCM_WORD_IN_7, LCM_WORD_IN_8 =>LCM_WORD_IN_8,
+			LCM_WORD_IN_9 =>LCM_WORD_IN_9, LCM_WORD_IN_10 =>LCM_WORD_IN_10, LCM_WORD_IN_11 =>LCM_WORD_IN_11, LCM_WORD_IN_12 =>LCM_WORD_IN_12,
+			LCM_WORD_IN_13 =>LCM_WORD_IN_13, LCM_WORD_IN_14 =>LCM_WORD_IN_14, LCM_WORD_IN_15 =>LCM_WORD_IN_15, LCM_WORD_IN_16 =>LCM_WORD_IN_16,
+			LCM_WORD_IN_17 =>LCM_WORD_IN_17, LCM_WORD_IN_18 =>LCM_WORD_IN_18, LCM_WORD_IN_19 =>LCM_WORD_IN_19, LCM_WORD_IN_20 =>LCM_WORD_IN_20, 
+			LCM_WORD_IN_21 =>LCM_WORD_IN_21, LCM_WORD_IN_22 =>LCM_WORD_IN_22, LCM_WORD_IN_23 =>LCM_WORD_IN_23, LCM_WORD_IN_24 =>LCM_WORD_IN_24
+            );
+    u1:BZ
+    port map(
+			CK => CK,
+			RESET => RESET,
+			BZ_OUT => BZ_OUT
+			);
+end A;			
+		
